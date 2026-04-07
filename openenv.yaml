@@ -4,3 +4,87 @@ type: space
 runtime: fastapi
 app: server.app:app
 port: 7860
+
+tasks:
+  - id: dns_failure
+    name: DNS Server Failure
+    difficulty: easy
+    description: >
+      The DNS server has crashed due to a misconfiguration in named.conf.
+      Hosts can no longer resolve domain names.
+      Identify the root cause and submit a ResolveAction.
+    max_steps: 10
+
+  - id: firewall_block
+    name: Firewall Blocking Outbound Traffic
+    difficulty: medium
+    description: >
+      An iptables rule on the internet-router is silently dropping all outbound
+      packets from host-a. Internal traffic works; only internet access is broken.
+      Identify the firewall rule causing the drop and submit a ResolveAction.
+    max_steps: 15
+
+  - id: cascading_failure
+    name: Cascading Multi-Hop Service Failure
+    difficulty: hard
+    description: >
+      A web server is returning 502 errors. Trace the full dependency chain
+      to find the true root cause: a BGP peer reset on core-router.
+    max_steps: 25
+
+observation:
+  type: object
+  properties:
+    stdout:
+      type: string
+      description: Terminal output of the last command
+    stderr:
+      type: string
+      description: Error output, if any
+    exit_code:
+      type: integer
+      description: "0 = success"
+    available_tools:
+      type: array
+      description: Populated after ListToolsAction
+    tool_result:
+      type: object
+      description: Raw result from the last tool call
+    done:
+      type: boolean
+      description: True when episode is complete
+    reward:
+      type: number
+      description: Per-step reward signal
+
+action:
+  type: object
+  properties:
+    action_type:
+      type: string
+      enum:
+        - NetAction
+        - ListToolsAction
+        - CallToolAction
+        - ResolveAction
+    command:
+      type: string
+    tool_name:
+      type: string
+    tool_params:
+      type: object
+    root_cause:
+      type: string
+    fix_applied:
+      type: string
+
+endpoints:
+  reset:
+    method: POST
+    path: /reset
+  step:
+    method: POST
+    path: /step
+  state:
+    method: GET
+    path: /state
