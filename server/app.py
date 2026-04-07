@@ -4,7 +4,7 @@ Exposes full OpenEnv spec + required hackathon endpoints:
   /reset  /step  /state  /tasks  /grader  /baseline  /health  /schema
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from typing import Any, Dict, Optional, Literal, List
 
@@ -49,7 +49,7 @@ class ResetRequest(BaseModel):
 
 
 class StepRequest(BaseModel):
-    action_type: Literal["NetAction", "ListToolsAction", "CallToolAction", "ResolveAction"]
+    action_type: Literal["NetAction", "ListToolsAction", "CallToolAction", "ResolveAction"] = "NetAction"
     command:     str            = ""
     tool_name:   str            = ""
     tool_params: Dict[str, Any] = {}
@@ -83,8 +83,23 @@ async def health():
 
 
 @app.post("/reset")
-async def reset(req: ResetRequest):
+async def reset(request: Request):
+    """
+    Reset the environment. Accepts an optional JSON body — all fields have defaults.
+    Also handles empty body or null body sent by automated checkers.
+    """
     env = get_env()
+
+    # Parse body safely — accept empty/null body from automated checkers
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
+    except Exception:
+        body = {}
+
+    req = ResetRequest(**{k: v for k, v in body.items() if v is not None})
+
     result = await env.reset(
         seed=req.seed,
         os_profile=req.os_profile,
@@ -103,8 +118,20 @@ async def reset(req: ResetRequest):
 
 
 @app.post("/step")
-async def step(req: StepRequest):
+async def step(request: Request):
+    """
+    Step the environment. Accepts an optional JSON body with defaults.
+    """
     env = get_env()
+
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
+    except Exception:
+        body = {}
+
+    req = StepRequest(**body)
 
     if req.action_type == "ListToolsAction":
         action = ListToolsAction()
@@ -222,24 +249,22 @@ async def grader(req: GraderRequest):
     if expected in submitted or submitted in expected:
         r_correctness = 1.0
     elif any(kw in submitted for kw in expected.split("_")):
-        r_correctness = 0.5   # partial keyword match
+        r_correctness = 0.5
     else:
         r_correctness = 0.0
 
-    # ── Efficiency — reward solving quickly, penalise over-stepping ──────────
-    # Ideal minimum steps: easy=3, medium=5, hard=8
+    # ── Efficiency ───────────────────────────────────────────────────────────
     ideal_min = {"easy": 3, "medium": 5, "hard": 8}.get(task["difficulty"], 5)
     oversteps = max(0, req.steps_taken - ideal_min)
     r_efficiency = max(0.0, 1.0 - oversteps / max_steps)
 
-    # ── Tool economy — tool_cost_sum is negative (each call costs points) ────
-    # Normalise to [0, 1]: 0 cost → 1.0, -1.0 cost → 0.0
+    # ── Tool economy ─────────────────────────────────────────────────────────
     r_tool = max(0.0, min(1.0, 1.0 + req.tool_cost_sum))
 
     # ── Difficulty multiplier ────────────────────────────────────────────────
     multiplier = {"easy": 1.0, "medium": 1.2, "hard": 1.5}.get(task["difficulty"], 1.0)
 
-    # ── Weighted combination, hard-capped at 1.0 ────────────────────────────
+    # ── Weighted combination ─────────────────────────────────────────────────
     raw_score = (
         0.60 * r_correctness +
         0.25 * r_efficiency  +
@@ -271,9 +296,7 @@ async def baseline():
     NO API KEY REQUIRED. Returns reproducible scores every time.
     Required by the OpenEnv hackathon spec.
     """
-    # Deterministic expert baseline: exact RCA + optimal step count per task
     expert_runs = [
-        # (scenario_id,       difficulty,  correct_rca,             steps, tool_cost)
         ("dns_failure",       "easy",   "dns_misconfiguration",    3,  -0.30),
         ("firewall_block",    "medium", "firewall_rule_drop",      5,  -0.50),
         ("cascading_failure", "hard",   "bgp_peer_reset",          7,  -0.70),
@@ -282,11 +305,9 @@ async def baseline():
     results = []
     for scenario_id, difficulty, rca, steps, tool_cost in expert_runs:
         task      = TASK_MAP[scenario_id]
-        expected  = task["expected_root_cause"]
         max_steps = task["max_steps"]
 
-        # Mirror the /grader logic exactly
-        r_correctness = 1.0  # expert always gets it right
+        r_correctness = 1.0
         ideal_min     = {"easy": 3, "medium": 5, "hard": 8}[difficulty]
         oversteps     = max(0, steps - ideal_min)
         r_efficiency  = max(0.0, 1.0 - oversteps / max_steps)
