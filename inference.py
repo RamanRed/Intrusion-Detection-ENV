@@ -4,8 +4,11 @@ inference.py — OpenEnv hackathon submission script for NetworkDiagnosticsEnv.
 Required env vars:
     API_BASE_URL   The API endpoint for the LLM (OpenAI-compatible)
     MODEL_NAME     The model identifier to use
-    HF_TOKEN       Your Hugging Face / API key
+    HF_TOKEN       Your Hugging Face / API key (no default — must be set)
     ENV_URL        The HF Space URL (default: http://localhost:7860)
+
+Optional env vars:
+    LOCAL_IMAGE_NAME   Used when calling from_docker_image()
 
 Logs structured [START], [STEP], [END] lines to stdout as required.
 """
@@ -20,10 +23,12 @@ from typing import List
 from openai import OpenAI
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME   = os.environ.get("MODEL_NAME",   "gpt-4o-mini")
-API_KEY      = os.environ.get("HF_TOKEN",     os.environ.get("OPENAI_API_KEY", "dummy"))
-ENV_URL      = os.environ.get("ENV_URL",      "http://localhost:7860").rstrip("/")
+API_BASE_URL     = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME       = os.getenv("MODEL_NAME",   "gpt-4o-mini")
+HF_TOKEN         = os.getenv("HF_TOKEN")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+
+ENV_URL = os.environ.get("ENV_URL", "http://localhost:7860").rstrip("/")
 
 TASK_NAME        = "NetworkDiagnosticsEnv"
 BENCHMARK        = "network-diagnostics-env"
@@ -83,7 +88,7 @@ SYSTEM_PROMPT = (
     "Reply with ONLY a single JSON action object — no prose, no markdown.\n"
     "Available action types:\n"
     '  {"action_type":"ListToolsAction"}\n'
-    '  {"action_type":"CallToolAction","tool_name":"<name>","tool_params":{"target":"<host>"}}\n'
+    '  {"action_type":"CallToolAction","tool_name":"<n>","tool_params":{"target":"<host>"}}\n'
     '  {"action_type":"ResolveAction","root_cause":"<rca>","fix_applied":"<fix>"}\n'
     "Diagnose efficiently. When confident, submit ResolveAction."
 )
@@ -165,7 +170,7 @@ def run_task_episode(client: OpenAI, task: dict) -> dict:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
     log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
 
