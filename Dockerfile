@@ -10,12 +10,14 @@ RUN apt-get update && \
 # Copy everything
 COPY . /app/
 
-# Install only what the server needs (no openai, no httpx)
+# Install server deps + inference deps
 RUN pip install --no-cache-dir \
     "fastapi>=0.115.0" \
     "uvicorn>=0.24.0" \
     "networkx>=3.0" \
-    "pydantic>=2.0.0"
+    "pydantic>=2.0.0" \
+    "openai>=1.0.0" \
+    "httpx>=0.27.0"
 
 # PYTHONPATH so 'models' and 'server.*' resolve from /app
 ENV PYTHONPATH="/app:$PYTHONPATH"
