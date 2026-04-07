@@ -54,6 +54,18 @@ class StepRequest(BaseModel):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+@app.get("/")
+async def root():
+    return {
+        "name": "NetworkDiagnosticsEnv",
+        "version": "1.0.0",
+        "status": "running",
+        "docs": "/docs",
+        "health": "/health",
+        "endpoints": ["/reset", "/step", "/state"]
+    }
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
