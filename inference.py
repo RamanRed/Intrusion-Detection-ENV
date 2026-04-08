@@ -69,7 +69,9 @@ def log_step(*, step: int, action: str, reward: float, done: bool, error) -> Non
 def log_end(*, success: bool, steps: int, score: float, rewards: List[float]) -> None:
     print(f"[END] task={TASK_NAME} score={score:.4f} steps={steps} success={success}", flush=True)
 
-# ── LLM call ─────────────────────────────────────────────────────────────────
+def log_grader(*, task: str, score: float, passed: bool) -> None:
+    print(f"[GRADER] task={task} score={score:.4f} passed={passed}", flush=True)
+
 
 SYSTEM_PROMPT = (
     "You are a network SRE agent diagnosing a simulated network failure.\n"
@@ -152,7 +154,26 @@ def run_task_episode(client: OpenAI, task: dict) -> dict:
 
     score = sum(rewards) / MAX_TOTAL_REWARD if MAX_TOTAL_REWARD > 0 else 0.0
     score = min(max(score, 0.0), 1.0)
-    return {"score": score, "rewards": rewards, "steps": steps_taken, "passed": score >= SUCCESS_SCORE_THRESHOLD}
+
+    # ── Call /grader for official per-task score ──────────────────────────────
+    tool_cost_sum = sum(r for r in rewards if r < 0)  # negative rewards are tool penalties
+    try:
+        grader_resp = _post(f"{ENV_URL}/grader", {
+            "scenario_id":          scenario_id,
+            "root_cause_submitted": "",   # best-effort; LLM may have resolved correctly
+            "steps_taken":          steps_taken,
+            "tool_cost_sum":        round(tool_cost_sum, 4),
+        })
+        grader_score  = grader_resp.get("score", score)
+        grader_passed = grader_resp.get("passed", grader_score >= SUCCESS_SCORE_THRESHOLD)
+    except Exception as exc:
+        print(f"[DEBUG] Grader call failed for {scenario_id}: {exc}", flush=True)
+        grader_score  = score
+        grader_passed = score >= SUCCESS_SCORE_THRESHOLD
+
+    log_grader(task=scenario_id, score=grader_score, passed=grader_passed)
+
+    return {"score": grader_score, "rewards": rewards, "steps": steps_taken, "passed": grader_passed}
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

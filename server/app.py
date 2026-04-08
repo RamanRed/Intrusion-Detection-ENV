@@ -271,7 +271,8 @@ async def grader(req: GraderRequest):
         0.15 * r_tool
     ) * multiplier
 
-    score = round(min(1.0, max(0.0, raw_score)), 4)
+    # Clamp strictly to (0.0, 1.0) exclusive — validator requires score in open interval
+    score = round(min(0.99, max(0.01, raw_score)), 4)
 
     return {
         "scenario_id":   req.scenario_id,
@@ -314,7 +315,7 @@ async def baseline():
         r_tool        = max(0.0, min(1.0, 1.0 + tool_cost))
         multiplier    = {"easy": 1.0, "medium": 1.2, "hard": 1.5}[difficulty]
         raw           = (0.60 * r_correctness + 0.25 * r_efficiency + 0.15 * r_tool) * multiplier
-        score         = round(min(1.0, max(0.0, raw)), 4)
+        score         = round(min(0.99, max(0.01, raw)), 4)
 
         results.append({
             "task_id":    scenario_id,
