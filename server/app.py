@@ -201,6 +201,7 @@ async def tasks():
                 "description": t["description"],
                 "hints":      t["hints"],
                 "max_steps":  t["max_steps"],
+                "grader": t["grader"],
                 "action_schema": {
                     "reset_with": {
                         "scenario_id": t["task_id"],

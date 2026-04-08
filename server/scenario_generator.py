@@ -16,6 +16,14 @@ TASKS = [
         "hints": ["Try pinging the DNS server", "Use nslookup to verify resolution failure"],
         "expected_root_cause": "dns_misconfiguration",
         "max_steps": 10,
+        "grader": {
+            "type": "api",
+            "endpoint": "/grader",
+            "method": "POST",
+            "input_fields": ["scenario_id", "root_cause_submitted", "steps_taken", "tool_cost_sum"],
+            "score_field": "score",
+            "pass_threshold": 0.5,
+        },
     },
     {
         "task_id": "firewall_block",
@@ -29,6 +37,14 @@ TASKS = [
         "hints": ["Internal ping works, external does not", "Check iptables rules on the router"],
         "expected_root_cause": "firewall_rule_drop",
         "max_steps": 15,
+        "grader": {
+            "type": "api",
+            "endpoint": "/grader",
+            "method": "POST",
+            "input_fields": ["scenario_id", "root_cause_submitted", "steps_taken", "tool_cost_sum"],
+            "score_field": "score",
+            "pass_threshold": 0.5,
+        },
     },
     {
         "task_id": "cascading_failure",
@@ -48,6 +64,14 @@ TASKS = [
         ],
         "expected_root_cause": "bgp_peer_reset",
         "max_steps": 25,
+        "grader": {
+            "type": "api",
+            "endpoint": "/grader",
+            "method": "POST",
+            "input_fields": ["scenario_id", "root_cause_submitted", "steps_taken", "tool_cost_sum"],
+            "score_field": "score",
+            "pass_threshold": 0.5,
+        },
     },
 ]
 
