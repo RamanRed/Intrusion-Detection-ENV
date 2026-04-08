@@ -1,12 +1,13 @@
 """
-scenario_generator.py — Advanced scenario registry and topology generator.
+scenario_generator.py — 9 tasks across 3 grader domains.
 
-Improvements over v1:
-  - 6 tasks (was 3): 2 easy / 2 medium / 2 hard
-  - Every task carries a grader descriptor (required by Phase-2 validator)
-  - Richer ground-truth metadata: affected_nodes, symptom_chain, fix_steps
-  - ScenarioGenerator produces realistic partial-observability noise
-  - Difficulty gates: partial_observability degrades visibility on hard tasks
+GRADER DOMAINS:
+  1. /grader/connectivity  — dns_failure, dhcp_starvation, firewall_block
+  2. /grader/infrastructure — ntp_drift, cascading_failure, routing_loop
+  3. /grader/distributed   — split_brain, replica_lag, job_queue_stall
+
+Each grader has exactly 3 tasks, satisfying the Phase-2 requirement:
+  "at least 3 tasks with graders"  (we have 3 graders × 3 tasks = 9 tasks)
 """
 
 import random
@@ -14,25 +15,31 @@ import networkx as nx
 from typing import Dict, Any, Tuple, List, Optional
 
 
-# ── Grader descriptor reused by every task ────────────────────────────────────
-def _grader_spec(pass_threshold: float = 0.5) -> Dict[str, Any]:
+# ── Grader descriptor builders ────────────────────────────────────────────────
+
+def _grader(endpoint: str, pass_threshold: float = 0.5) -> Dict[str, Any]:
     return {
-        "type":         "api",
-        "endpoint":     "/grader",
-        "method":       "POST",
-        "input_fields": ["scenario_id", "root_cause_submitted", "steps_taken", "tool_cost_sum"],
-        "score_field":  "score",
+        "type":           "api",
+        "endpoint":       endpoint,
+        "method":         "POST",
+        "input_fields":   ["scenario_id", "root_cause_submitted", "steps_taken", "tool_cost_sum"],
+        "score_field":    "score",
         "pass_threshold": pass_threshold,
     }
 
 
-# ── Task registry ─────────────────────────────────────────────────────────────
+# ── Task registry — 9 tasks across 3 grader domains ──────────────────────────
+
 TASKS: List[Dict[str, Any]] = [
 
-    # ── Easy ─────────────────────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # GRADER 1 — /grader/connectivity  (DNS · DHCP · Firewall)
+    # ══════════════════════════════════════════════════════════════════════════
+
     {
         "task_id":   "dns_failure",
         "name":      "DNS Server Failure",
+        "domain":    "connectivity",
         "difficulty": "easy",
         "description": (
             "The DNS server has crashed due to a misconfiguration in /etc/named.conf. "
@@ -48,11 +55,12 @@ TASKS: List[Dict[str, Any]] = [
         "symptom_chain":        ["nslookup fails", "named.conf parse error", "named process down"],
         "fix_steps":            ["fix /etc/named.conf", "systemctl restart named"],
         "max_steps":            10,
-        "grader":               _grader_spec(0.5),
+        "grader":               _grader("/grader/connectivity"),
     },
     {
         "task_id":   "dhcp_starvation",
         "name":      "DHCP Pool Exhaustion",
+        "domain":    "connectivity",
         "difficulty": "easy",
         "description": (
             "New hosts are failing to obtain IP addresses. The DHCP server has run out of "
@@ -68,13 +76,12 @@ TASKS: List[Dict[str, Any]] = [
         "symptom_chain":        ["new hosts get no IP", "DHCP lease table full", "rogue device flooding"],
         "fix_steps":            ["block rogue MAC", "flush stale leases", "expand pool range"],
         "max_steps":            10,
-        "grader":               _grader_spec(0.5),
+        "grader":               _grader("/grader/connectivity"),
     },
-
-    # ── Medium ────────────────────────────────────────────────────────────────
     {
         "task_id":   "firewall_block",
         "name":      "Firewall Blocking Outbound Traffic",
+        "domain":    "connectivity",
         "difficulty": "medium",
         "description": (
             "An iptables rule on the internet-router is silently dropping all outbound packets "
@@ -90,11 +97,17 @@ TASKS: List[Dict[str, Any]] = [
         "symptom_chain":        ["external ping fails", "iptables DROP rule on FORWARD chain"],
         "fix_steps":            ["iptables -D FORWARD -s 10.0.0.5 -j DROP", "save rules"],
         "max_steps":            15,
-        "grader":               _grader_spec(0.5),
+        "grader":               _grader("/grader/connectivity"),
     },
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # GRADER 2 — /grader/infrastructure  (NTP · BGP Cascade · Routing Loop)
+    # ══════════════════════════════════════════════════════════════════════════
+
     {
         "task_id":   "ntp_drift",
         "name":      "NTP Clock Skew Breaking TLS",
+        "domain":    "infrastructure",
         "difficulty": "medium",
         "description": (
             "Internal HTTPS services are failing with certificate validation errors. "
@@ -111,13 +124,12 @@ TASKS: List[Dict[str, Any]] = [
         "symptom_chain":        ["TLS cert errors", "clock drift >5 min", "ntpd crashed"],
         "fix_steps":            ["systemctl restart ntpd", "ntpdate -u pool.ntp.org"],
         "max_steps":            15,
-        "grader":               _grader_spec(0.5),
+        "grader":               _grader("/grader/infrastructure"),
     },
-
-    # ── Hard ──────────────────────────────────────────────────────────────────
     {
         "task_id":   "cascading_failure",
         "name":      "Cascading Multi-Hop Service Failure",
+        "domain":    "infrastructure",
         "difficulty": "hard",
         "description": (
             "A web server (web-svc) is returning 502 errors. The root cause is a chain: "
@@ -133,14 +145,43 @@ TASKS: List[Dict[str, Any]] = [
         ],
         "expected_root_cause":  "bgp_peer_reset",
         "affected_nodes":       ["core-router", "db-server", "app-server", "web-svc"],
-        "symptom_chain":        ["web-svc 502", "app-server pool exhausted", "db unreachable", "BGP down on core-router"],
+        "symptom_chain":        ["web-svc 502", "app-server pool exhausted", "db unreachable", "BGP down"],
         "fix_steps":            ["restart BGP session on core-router", "wait for route reconvergence"],
         "max_steps":            25,
-        "grader":               _grader_spec(0.5),
+        "grader":               _grader("/grader/infrastructure"),
     },
+    {
+        "task_id":   "routing_loop",
+        "name":      "Static Route Causing Routing Loop",
+        "domain":    "infrastructure",
+        "difficulty": "medium",
+        "description": (
+            "Packets to subnet 10.2.0.0/24 are being forwarded in a loop between "
+            "router-a and router-b, causing 100% packet loss and high CPU. "
+            "A misconfigured static route on router-a points to router-b as next-hop, "
+            "while router-b points back to router-a. "
+            "Identify the root cause and submit a ResolveAction."
+        ),
+        "hints": [
+            "Run traceroute to 10.2.0.1 — observe TTL expiry looping between routers",
+            "Check static route tables on both routers with 'ip route show'",
+        ],
+        "expected_root_cause":  "static_routing_loop",
+        "affected_nodes":       ["router-a", "router-b"],
+        "symptom_chain":        ["ping TTL exceeded", "traceroute loops", "misconfigured static routes"],
+        "fix_steps":            ["remove bad static route on router-a", "add correct next-hop"],
+        "max_steps":            15,
+        "grader":               _grader("/grader/infrastructure"),
+    },
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # GRADER 3 — /grader/distributed  (Split-Brain · Replica Lag · Job Queue)
+    # ══════════════════════════════════════════════════════════════════════════
+
     {
         "task_id":   "split_brain",
         "name":      "Split-Brain Cluster with Stale Leader",
+        "domain":    "distributed",
         "difficulty": "hard",
         "description": (
             "A distributed key-value cluster (3 nodes) has two nodes claiming leadership "
@@ -159,21 +200,70 @@ TASKS: List[Dict[str, Any]] = [
         "symptom_chain":        ["dual leader", "write divergence", "premature election", "heartbeat timeout too low"],
         "fix_steps":            ["fence stale leader", "increase heartbeat timeout", "trigger re-election", "resync data"],
         "max_steps":            30,
-        "grader":               _grader_spec(0.5),
+        "grader":               _grader("/grader/distributed"),
+    },
+    {
+        "task_id":   "replica_lag",
+        "name":      "Database Replica Lag Causing Stale Reads",
+        "domain":    "distributed",
+        "difficulty": "medium",
+        "description": (
+            "Read queries to the database read-replica are returning data that is "
+            "30+ seconds old, causing stale cache and incorrect API responses. "
+            "The replica's I/O thread is stuck because the primary's binary log "
+            "was rotated and the replica was not updated with the new log position. "
+            "Identify the root cause and submit a ResolveAction."
+        ),
+        "hints": [
+            "Run SHOW SLAVE STATUS on db-replica to check Seconds_Behind_Master",
+            "Check if the replica I/O thread is Running or has an error",
+            "Compare binary log positions between primary and replica",
+        ],
+        "expected_root_cause":  "replica_binlog_position_mismatch",
+        "affected_nodes":       ["db-primary", "db-replica"],
+        "symptom_chain":        ["stale reads", "replica lag >30s", "I/O thread error", "binlog rotated"],
+        "fix_steps":            ["STOP SLAVE", "CHANGE MASTER TO MASTER_LOG_FILE", "START SLAVE"],
+        "max_steps":            15,
+        "grader":               _grader("/grader/distributed"),
+    },
+    {
+        "task_id":   "job_queue_stall",
+        "name":      "Distributed Job Queue Stall",
+        "domain":    "distributed",
+        "difficulty": "easy",
+        "description": (
+            "Background jobs have stopped processing for 20 minutes. "
+            "The job queue (Redis-backed) has 50,000 pending jobs but all workers "
+            "are idle. A deployment pushed a bad worker binary that crashes on "
+            "startup due to a missing environment variable JOB_CONCURRENCY. "
+            "Workers keep restarting in a crash-loop, never picking up jobs. "
+            "Identify the root cause and submit a ResolveAction."
+        ),
+        "hints": [
+            "Check worker process logs — look for startup crash or missing env var",
+            "Inspect the worker container restart count with check_service",
+            "Verify queue depth with check_queue to confirm jobs are present",
+        ],
+        "expected_root_cause":  "worker_crash_missing_env_var",
+        "affected_nodes":       ["job-worker", "redis-queue"],
+        "symptom_chain":        ["jobs not processed", "worker crash-loop", "missing env var JOB_CONCURRENCY"],
+        "fix_steps":            ["set JOB_CONCURRENCY env var", "redeploy workers", "verify queue draining"],
+        "max_steps":            10,
+        "grader":               _grader("/grader/distributed"),
     },
 ]
 
 TASK_MAP: Dict[str, Dict[str, Any]] = {t["task_id"]: t for t in TASKS}
 
+# Tasks grouped by grader domain — used by /grader/* endpoints
+TASKS_BY_DOMAIN: Dict[str, List[Dict[str, Any]]] = {}
+for _t in TASKS:
+    TASKS_BY_DOMAIN.setdefault(_t["domain"], []).append(_t)
+
 
 # ── Scenario generator ────────────────────────────────────────────────────────
 
 class ScenarioGenerator:
-    """
-    Builds a networkx topology graph + ground-truth metadata for a given scenario.
-    Supports partial-observability noise injection for hard scenarios.
-    """
-
     def __init__(self):
         self._rng = random.Random()
 
@@ -185,52 +275,44 @@ class ScenarioGenerator:
         seed: Optional[int] = None,
         partial_observability: float = 1.0,
     ) -> Tuple[nx.DiGraph, Dict[str, Any]]:
-
         if seed is not None:
             self._rng.seed(seed)
 
         graph = nx.DiGraph()
         ground_truth: Dict[str, Any] = {
-            "scenario_id":      scenario_id,
-            "root_cause_node":  "",
-            "root_cause":       "",
-            "fix_applied":      "",
-            "affected_nodes":   [],
-            "symptom_chain":    [],
+            "scenario_id":     scenario_id,
+            "root_cause_node": "",
+            "root_cause":      "",
+            "fix_applied":     "",
+            "affected_nodes":  [],
+            "symptom_chain":   [],
         }
 
         builder = getattr(self, f"_build_{scenario_id}", self._build_default)
         builder(graph, ground_truth, os_profile, difficulty, partial_observability)
         return graph, ground_truth
 
-    # ── Base topology shared by all scenarios ─────────────────────────────────
-    def _add_base_topology(
-        self,
-        graph: nx.DiGraph,
-        os_profile: str,
-        partial_observability: float,
-    ) -> None:
-        """Add core nodes. Under partial observability some attributes are hidden."""
+    # ── Shared base topology ──────────────────────────────────────────────────
+
+    def _add_base_topology(self, graph, os_profile, po):
         nodes = [
-            ("host-a",          os_profile,   "10.0.0.5",   "up"),
-            ("dns-server",      "linux",       "10.0.0.1",   "up"),
-            ("internet-router", "linux",       "10.0.0.254", "up"),
-            ("dhcp-server",     "linux",       "10.0.0.2",   "up"),
-            ("ntp-server",      "linux",       "10.0.0.3",   "up"),
+            ("host-a",          os_profile,  "10.0.0.5",   "up"),
+            ("dns-server",      "linux",     "10.0.0.1",   "up"),
+            ("internet-router", "linux",     "10.0.0.254", "up"),
+            ("dhcp-server",     "linux",     "10.0.0.2",   "up"),
+            ("ntp-server",      "linux",     "10.0.0.3",   "up"),
         ]
         for name, os_, ip, status in nodes:
             attrs: Dict[str, Any] = {"os": os_, "ip": ip, "status": status}
-            # Partial observability: randomly mask status on hard scenarios
-            if partial_observability < 0.8 and self._rng.random() > partial_observability:
+            if po < 0.8 and self._rng.random() > po:
                 attrs["status"] = "unknown"
             graph.add_node(name, **attrs)
-
         graph.add_edge("host-a", "dns-server",      latency_ms=1)
         graph.add_edge("host-a", "internet-router", latency_ms=2)
         graph.add_edge("host-a", "dhcp-server",     latency_ms=1)
         graph.add_edge("host-a", "ntp-server",      latency_ms=1)
 
-    # ── Scenario builders ──────────────────────────────────────────────────────
+    # ── CONNECTIVITY scenarios ────────────────────────────────────────────────
 
     def _build_dns_failure(self, graph, gt, os_profile, difficulty, po):
         self._add_base_topology(graph, os_profile, po)
@@ -242,22 +324,20 @@ class ScenarioGenerator:
             "root_cause":      "dns_misconfiguration",
             "fix_applied":     "restarted_named",
             "affected_nodes":  ["dns-server"],
-            "symptom_chain":   ["nslookup fails", "named.conf parse error", "named process down"],
         })
 
     def _build_dhcp_starvation(self, graph, gt, os_profile, difficulty, po):
         self._add_base_topology(graph, os_profile, po)
-        graph.nodes["dhcp-server"]["pool_exhausted"]    = True
-        graph.nodes["dhcp-server"]["leases_total"]      = 254
-        graph.nodes["dhcp-server"]["leases_used"]       = 254
-        graph.nodes["dhcp-server"]["rogue_mac"]         = "de:ad:be:ef:00:01"
-        graph.nodes["dhcp-server"]["rogue_req_rate"]    = 1200  # req/min
+        graph.nodes["dhcp-server"]["pool_exhausted"] = True
+        graph.nodes["dhcp-server"]["leases_total"]   = 254
+        graph.nodes["dhcp-server"]["leases_used"]    = 254
+        graph.nodes["dhcp-server"]["rogue_mac"]      = "de:ad:be:ef:00:01"
+        graph.nodes["dhcp-server"]["rogue_req_rate"] = 1200
         gt.update({
             "root_cause_node": "dhcp-server",
             "root_cause":      "dhcp_pool_exhausted",
             "fix_applied":     "blocked_rogue_mac_flushed_leases",
             "affected_nodes":  ["dhcp-server"],
-            "symptom_chain":   ["new hosts get no IP", "lease table full", "rogue device flooding"],
         })
 
     def _build_firewall_block(self, graph, gt, os_profile, difficulty, po):
@@ -269,38 +349,35 @@ class ScenarioGenerator:
             "root_cause":      "firewall_rule_drop",
             "fix_applied":     "iptables_flush",
             "affected_nodes":  ["internet-router"],
-            "symptom_chain":   ["external ping fails", "iptables DROP rule on FORWARD chain"],
         })
+
+    # ── INFRASTRUCTURE scenarios ──────────────────────────────────────────────
 
     def _build_ntp_drift(self, graph, gt, os_profile, difficulty, po):
         self._add_base_topology(graph, os_profile, po)
-        graph.nodes["ntp-server"]["status"]       = "down"
-        graph.nodes["ntp-server"]["clock_drift_s"] = 380   # ~6 min drift
-        graph.nodes["ntp-server"]["ntpd_error"]   = "ntpd: segmentation fault (core dumped)"
-        # All other hosts show TLS errors as a symptom
+        graph.nodes["ntp-server"]["status"]        = "down"
+        graph.nodes["ntp-server"]["clock_drift_s"] = 380
+        graph.nodes["ntp-server"]["ntpd_error"]    = "ntpd: segmentation fault (core dumped)"
         for n in ["host-a", "dns-server", "internet-router"]:
-            graph.nodes[n]["tls_errors"] = True
+            graph.nodes[n]["tls_errors"]    = True
             graph.nodes[n]["clock_drift_s"] = 380
         gt.update({
             "root_cause_node": "ntp-server",
             "root_cause":      "ntp_clock_skew",
             "fix_applied":     "restarted_ntpd_and_synced_clocks",
             "affected_nodes":  ["ntp-server", "host-a", "dns-server"],
-            "symptom_chain":   ["TLS cert errors", "clock drift >5 min", "ntpd crashed"],
         })
 
     def _build_cascading_failure(self, graph, gt, os_profile, difficulty, po):
         self._add_base_topology(graph, os_profile, po)
-        # Extended topology
         extra = [
-            ("web-svc",         "linux", "10.1.0.10", "up"),
-            ("app-server",      "linux", "10.1.0.20", "up"),
-            ("db-server",       "linux", "10.1.0.30", "up"),
-            ("core-router",     "linux", "10.1.0.1",  "up"),
+            ("web-svc",     "linux", "10.1.0.10", "up"),
+            ("app-server",  "linux", "10.1.0.20", "up"),
+            ("db-server",   "linux", "10.1.0.30", "up"),
+            ("core-router", "linux", "10.1.0.1",  "up"),
         ]
         for name, os_, ip, status in extra:
             graph.add_node(name, os=os_, ip=ip, status=status)
-
         graph.nodes["web-svc"]["http_status"]          = 502
         graph.nodes["app-server"]["db_pool_exhausted"] = True
         graph.nodes["app-server"]["pool_size"]         = 100
@@ -309,50 +386,90 @@ class ScenarioGenerator:
         graph.nodes["core-router"]["bgp_session"]      = "down"
         graph.nodes["core-router"]["bgp_peer"]         = "10.1.0.254"
         graph.nodes["core-router"]["bgp_reset_reason"] = "hold_timer_expired"
-
         graph.add_edge("web-svc",    "app-server",  latency_ms=2)
-        graph.add_edge("app-server", "db-server",   latency_ms=1,  connection_refused=True)
-        graph.add_edge("db-server",  "core-router", latency_ms=1,  route_lost=True)
+        graph.add_edge("app-server", "db-server",   latency_ms=1, connection_refused=True)
+        graph.add_edge("db-server",  "core-router", latency_ms=1, route_lost=True)
         graph.add_edge("host-a",     "web-svc",     latency_ms=5)
-
         gt.update({
             "root_cause_node": "core-router",
             "root_cause":      "bgp_peer_reset",
             "fix_applied":     "restart_bgp_session",
             "affected_nodes":  ["core-router", "db-server", "app-server", "web-svc"],
-            "symptom_chain":   ["web-svc 502", "app-server pool exhausted", "db unreachable", "BGP down on core-router"],
         })
+
+    def _build_routing_loop(self, graph, gt, os_profile, difficulty, po):
+        self._add_base_topology(graph, os_profile, po)
+        graph.add_node("router-a", os="linux", ip="10.0.1.1",  status="up", routing_loop=True)
+        graph.add_node("router-b", os="linux", ip="10.0.1.2",  status="up", routing_loop=True)
+        graph.add_node("target",   os="linux", ip="10.2.0.1",  status="up")
+        # Loop: router-a → router-b → router-a for 10.2.0.0/24
+        graph.add_edge("host-a",   "router-a", latency_ms=2)
+        graph.add_edge("router-a", "router-b", latency_ms=1, bad_static_route="10.2.0.0/24 via router-b")
+        graph.add_edge("router-b", "router-a", latency_ms=1, bad_static_route="10.2.0.0/24 via router-a")
+        gt.update({
+            "root_cause_node": "router-a",
+            "root_cause":      "static_routing_loop",
+            "fix_applied":     "removed_bad_static_route",
+            "affected_nodes":  ["router-a", "router-b"],
+        })
+
+    # ── DISTRIBUTED scenarios ─────────────────────────────────────────────────
 
     def _build_split_brain(self, graph, gt, os_profile, difficulty, po):
         self._add_base_topology(graph, os_profile, po)
         cluster_nodes = [
             ("cluster-node-1", "linux", "10.2.0.1", "up", "leader",   300),
-            ("cluster-node-2", "linux", "10.2.0.2", "up", "leader",   100),   # stale leader
+            ("cluster-node-2", "linux", "10.2.0.2", "up", "leader",   100),
             ("cluster-node-3", "linux", "10.2.0.3", "up", "follower", 300),
         ]
-        for name, os_, ip, status, role, hb_timeout_ms in cluster_nodes:
-            graph.add_node(
-                name, os=os_, ip=ip, status=status,
-                cluster_role=role,
-                heartbeat_timeout_ms=hb_timeout_ms,
-                split_brain=(role == "leader" and name == "cluster-node-2"),
-            )
-
-        # Partial partition: node-2 ↔ node-1 link was flaky
+        for name, os_, ip, status, role, hb in cluster_nodes:
+            graph.add_node(name, os=os_, ip=ip, status=status,
+                           cluster_role=role, heartbeat_timeout_ms=hb,
+                           split_brain=(role == "leader" and name == "cluster-node-2"))
         graph.add_edge("cluster-node-1", "cluster-node-2", latency_ms=2, flaky=True)
         graph.add_edge("cluster-node-1", "cluster-node-3", latency_ms=1)
         graph.add_edge("cluster-node-2", "cluster-node-3", latency_ms=1)
         graph.add_edge("cluster-node-3", "cluster-node-1", latency_ms=1)
-
         gt.update({
             "root_cause_node": "cluster-node-2",
             "root_cause":      "split_brain_misconfigured_heartbeat",
             "fix_applied":     "fenced_stale_leader_increased_timeout",
             "affected_nodes":  ["cluster-node-1", "cluster-node-2", "cluster-node-3"],
-            "symptom_chain":   ["dual leader", "write divergence", "premature election", "heartbeat timeout too low"],
+        })
+
+    def _build_replica_lag(self, graph, gt, os_profile, difficulty, po):
+        self._add_base_topology(graph, os_profile, po)
+        graph.add_node("db-primary", os="linux", ip="10.3.0.1", status="up",
+                       binlog_file="mysql-bin.000042", binlog_pos=1048576)
+        graph.add_node("db-replica", os="linux", ip="10.3.0.2", status="up",
+                       replica_lag_s=45, io_thread="error",
+                       io_error="Got fatal error 1236: 'Could not find first log file name in binary log index file'",
+                       binlog_file="mysql-bin.000041", binlog_pos=999999)
+        graph.add_edge("db-replica", "db-primary", latency_ms=1)
+        graph.add_edge("host-a",     "db-replica", latency_ms=2)
+        gt.update({
+            "root_cause_node": "db-replica",
+            "root_cause":      "replica_binlog_position_mismatch",
+            "fix_applied":     "stop_slave_change_master_start_slave",
+            "affected_nodes":  ["db-primary", "db-replica"],
+        })
+
+    def _build_job_queue_stall(self, graph, gt, os_profile, difficulty, po):
+        self._add_base_topology(graph, os_profile, po)
+        graph.add_node("redis-queue", os="linux", ip="10.4.0.1", status="up",
+                       queue_depth=50000, queue_name="jobs:default")
+        graph.add_node("job-worker",  os="linux", ip="10.4.0.2", status="crash-loop",
+                       restart_count=47,
+                       crash_error="KeyError: 'JOB_CONCURRENCY' — missing required env var")
+        graph.add_edge("job-worker", "redis-queue", latency_ms=1)
+        graph.add_edge("host-a",     "redis-queue", latency_ms=2)
+        gt.update({
+            "root_cause_node": "job-worker",
+            "root_cause":      "worker_crash_missing_env_var",
+            "fix_applied":     "set_JOB_CONCURRENCY_and_redeploy",
+            "affected_nodes":  ["job-worker", "redis-queue"],
         })
 
     def _build_default(self, graph, gt, os_profile, difficulty, po):
-        """Fallback for unknown scenario IDs."""
         self._add_base_topology(graph, os_profile, po)
         gt.update({"root_cause": "unknown", "root_cause_node": "", "fix_applied": ""})
