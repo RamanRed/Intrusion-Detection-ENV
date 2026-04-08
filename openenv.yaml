@@ -1,207 +1,96 @@
-spec_version: 1
-name: network-diagnostics-env
-type: space
-runtime: fastapi
-app: server.app:app
-port: 7860
+version: "1.0"
 
-graders:
-  - id: connectivity
-    endpoint: /grader/connectivity
-    method: POST
-    description: >
-      Grades connectivity-domain tasks: DNS failure, DHCP starvation, firewall block.
-    input_fields:
-      - scenario_id
-      - root_cause_submitted
-      - steps_taken
-      - tool_cost_sum
-    score_field: score
-    pass_threshold: 0.5
+name: "network-diagnostics-env"
 
-  - id: infrastructure
-    endpoint: /grader/infrastructure
-    method: POST
-    description: >
-      Grades infrastructure-domain tasks: NTP drift, cascading BGP failure, routing loop.
-    input_fields:
-      - scenario_id
-      - root_cause_submitted
-      - steps_taken
-      - tool_cost_sum
-    score_field: score
-    pass_threshold: 0.5
+description: "An OpenEnv-compliant environment for evaluating AI agents on autonomous network troubleshooting. 9 tasks across 3 grader domains (connectivity / infrastructure / distributed)."
 
-  - id: distributed
-    endpoint: /grader/distributed
-    method: POST
-    description: >
-      Grades distributed-systems tasks: split-brain cluster, replica lag, job queue stall.
-    input_fields:
-      - scenario_id
-      - root_cause_submitted
-      - steps_taken
-      - tool_cost_sum
-    score_field: score
-    pass_threshold: 0.5
+entry_point: "server.app:app"
+
+author: "MetaPyTorch Team"
+
+license: "MIT"
 
 tasks:
-  # ── GRADER: connectivity ──────────────────────────────────────────────────
-  - id: dns_failure
-    name: DNS Server Failure
-    difficulty: easy
-    grader: connectivity
-    description: >
-      The DNS server has crashed due to a misconfiguration in /etc/named.conf.
-      Hosts can no longer resolve domain names.
-      Identify the root cause and submit a ResolveAction.
+  # ── GRADER: /grader/connectivity ─────────────────────────────────────────
+  - id: "dns_failure"
+    grader: "server.app:grader_connectivity"
+    name: "DNS Server Failure"
+    description: "The DNS server crashed due to a misconfiguration in /etc/named.conf. Hosts can no longer resolve domain names. Identify the root cause and submit a ResolveAction."
+    difficulty: "easy"
     max_steps: 10
 
-  - id: dhcp_starvation
-    name: DHCP Pool Exhaustion
-    difficulty: easy
-    grader: connectivity
-    description: >
-      New hosts fail to obtain IP addresses. The DHCP server pool is exhausted
-      because a rogue device is flooding DHCP requests.
-      Identify the root cause and submit a ResolveAction.
+  - id: "dhcp_starvation"
+    grader: "server.app:grader_connectivity"
+    name: "DHCP Pool Exhaustion"
+    description: "New hosts fail to obtain IP addresses. The DHCP pool is exhausted due to a rogue device flooding DHCP requests. Identify the root cause and submit a ResolveAction."
+    difficulty: "easy"
     max_steps: 10
 
-  - id: firewall_block
-    name: Firewall Blocking Outbound Traffic
-    difficulty: medium
-    grader: connectivity
-    description: >
-      An iptables rule on the internet-router is silently dropping all outbound
-      packets from host-a. Internal traffic works; only internet access is broken.
-      Identify the firewall rule causing the drop and submit a ResolveAction.
+  - id: "firewall_block"
+    grader: "server.app:grader_connectivity"
+    name: "Firewall Blocking Outbound Traffic"
+    description: "An iptables rule on the internet-router silently drops all outbound packets from host-a. Internal traffic works; internet access is broken. Identify the rule and submit a ResolveAction."
+    difficulty: "medium"
     max_steps: 15
 
-  # ── GRADER: infrastructure ────────────────────────────────────────────────
-  - id: ntp_drift
-    name: NTP Clock Skew Breaking TLS
-    difficulty: medium
-    grader: infrastructure
-    description: >
-      Internal HTTPS services are failing with TLS certificate validation errors.
-      The ntp-server process crashed and host clocks have drifted by more than 5 minutes.
-      Identify the root cause and submit a ResolveAction.
+  # ── GRADER: /grader/infrastructure ───────────────────────────────────────
+  - id: "ntp_drift"
+    grader: "server.app:grader_infrastructure"
+    name: "NTP Clock Skew Breaking TLS"
+    description: "Internal HTTPS services fail with TLS certificate errors. The ntp-server crashed and host clocks drifted by more than 5 minutes. Identify the root cause and submit a ResolveAction."
+    difficulty: "medium"
     max_steps: 15
 
-  - id: cascading_failure
-    name: Cascading Multi-Hop Service Failure
-    difficulty: hard
-    grader: infrastructure
-    description: >
-      A web server is returning 502 errors. Trace the full dependency chain
-      to find the true root cause: a BGP peer reset on core-router caused the
-      database to lose its route, exhausting the app-server connection pool.
+  - id: "cascading_failure"
+    grader: "server.app:grader_infrastructure"
+    name: "Cascading Multi-Hop Service Failure"
+    description: "A web server returns 502 errors. Trace the full chain: BGP peer reset on core-router caused the database to lose its route, exhausting the app-server connection pool. Submit a ResolveAction."
+    difficulty: "hard"
     max_steps: 25
 
-  - id: routing_loop
-    name: Static Route Causing Routing Loop
-    difficulty: medium
-    grader: infrastructure
-    description: >
-      Packets to subnet 10.2.0.0/24 are being forwarded in a loop between
-      router-a and router-b, causing 100% packet loss and high CPU.
-      Identify the misconfigured static route and submit a ResolveAction.
+  - id: "routing_loop"
+    grader: "server.app:grader_infrastructure"
+    name: "Static Route Causing Routing Loop"
+    description: "Packets to subnet 10.2.0.0/24 loop between router-a and router-b, causing 100% packet loss and high CPU. Identify the misconfigured static route and submit a ResolveAction."
+    difficulty: "medium"
     max_steps: 15
 
-  # ── GRADER: distributed ───────────────────────────────────────────────────
-  - id: split_brain
-    name: Split-Brain Cluster with Stale Leader
-    difficulty: hard
-    grader: distributed
-    description: >
-      Two cluster nodes claim leadership after a network partition.
-      A misconfigured heartbeat timeout caused a premature leader election.
-      Identify the root cause and submit a ResolveAction.
+  # ── GRADER: /grader/distributed ──────────────────────────────────────────
+  - id: "split_brain"
+    grader: "server.app:grader_distributed"
+    name: "Split-Brain Cluster with Stale Leader"
+    description: "Two cluster nodes claim leadership after a network partition. A misconfigured heartbeat timeout caused a premature election. Identify the root cause and submit a ResolveAction."
+    difficulty: "hard"
     max_steps: 30
 
-  - id: replica_lag
-    name: Database Replica Lag Causing Stale Reads
-    difficulty: medium
-    grader: distributed
-    description: >
-      Read queries to the database read-replica return data that is 30+ seconds old.
-      The replica I/O thread is stuck because the primary binary log was rotated
-      and the replica was not updated with the new log position.
-      Identify the root cause and submit a ResolveAction.
+  - id: "replica_lag"
+    grader: "server.app:grader_distributed"
+    name: "Database Replica Lag Causing Stale Reads"
+    description: "Read queries return data 30+ seconds old. The replica I/O thread is stuck because the primary binary log was rotated without updating the replica log position. Submit a ResolveAction."
+    difficulty: "medium"
     max_steps: 15
 
-  - id: job_queue_stall
-    name: Distributed Job Queue Stall
-    difficulty: easy
-    grader: distributed
-    description: >
-      Background jobs have stopped processing for 20 minutes.
-      All workers are crash-looping on startup due to a missing environment variable.
-      Identify the root cause and submit a ResolveAction.
+  - id: "job_queue_stall"
+    grader: "server.app:grader_distributed"
+    name: "Distributed Job Queue Stall"
+    description: "Background jobs stopped processing. All workers crash-loop on startup due to a missing environment variable. Identify the root cause and submit a ResolveAction."
+    difficulty: "easy"
     max_steps: 10
 
-observation:
-  type: object
-  properties:
-    stdout:
-      type: string
-      description: Terminal output of the last command
-    stderr:
-      type: string
-      description: Error output, if any
-    exit_code:
-      type: integer
-      description: "0 = success"
-    available_tools:
-      type: array
-      description: Populated after ListToolsAction
-    tool_result:
-      type: object
-      description: Raw result from the last tool call
-    done:
-      type: boolean
-      description: True when episode is complete
-    reward:
-      type: number
-      description: Per-step reward signal
+observation_space: "NetObservation"
 
-action:
-  type: object
-  properties:
-    action_type:
-      type: string
-      enum:
-        - NetAction
-        - ListToolsAction
-        - CallToolAction
-        - ResolveAction
-    command:
-      type: string
-    tool_name:
-      type: string
-    tool_params:
-      type: object
-    root_cause:
-      type: string
-    fix_applied:
-      type: string
+action_space: "NetAction"
 
 endpoints:
-  reset:
-    method: POST
-    path: /reset
-  step:
-    method: POST
-    path: /step
-  state:
-    method: GET
-    path: /state
-  tasks:
-    method: GET
-    path: /tasks
-  baseline:
-    method: GET
-    path: /baseline
-  schema:
-    method: GET
-    path: /schema
+  health: /health
+  reset: /reset
+  step: /step
+  state: /state
+  grade: /grader
+  tasks: /tasks
+  baseline: /baseline
+
+scoring:
+  reward_range: [0.01, 0.99]
+  success_threshold: 0.5
+  score_formula: mean(step_rewards)

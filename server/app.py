@@ -7,8 +7,8 @@ Grader endpoints:
   POST /grader/distributed    — split_brain, replica_lag, job_queue_stall
 
 All other OpenEnv required endpoints:
-  GET  /health  POST /reset  POST /step  GET /state
-  GET  /tasks   GET  /tasks/{id}  GET /baseline  GET /schema
+  GET  /health  GET /healthz  POST /reset  POST /step  GET /state
+  GET  /tasks   GET /tasks/{id}  GET /baseline  GET /schema
 """
 
 from fastapi import FastAPI, HTTPException, Request
@@ -169,6 +169,12 @@ async def root():
 
 @app.get("/health")
 async def health():
+    return {"status": "ok", "version": "3.0.0"}
+
+
+@app.get("/healthz")
+async def healthz():
+    """Alias for /health — required by OpenEnv validators (matches reference repo pattern)."""
     return {"status": "ok", "version": "3.0.0"}
 
 
