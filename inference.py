@@ -60,26 +60,14 @@ except ImportError:
 # ── Structured logging (required format) ─────────────────────────────────────
 
 def log_start(*, task: str, env: str, model: str) -> None:
-    print(json.dumps({"type": "START", "task": task, "env": env, "model": model}), flush=True)
+    print(f"[START] task={task} env={env} model={model}", flush=True)
 
 def log_step(*, step: int, action: str, reward: float, done: bool, error) -> None:
-    print(json.dumps({
-        "type":   "STEP",
-        "step":   step,
-        "action": action,
-        "reward": reward,
-        "done":   done,
-        "error":  error,
-    }), flush=True)
+    err_str = f" error={error}" if error is not None else ""
+    print(f"[STEP] step={step} reward={reward} done={done}{err_str}", flush=True)
 
 def log_end(*, success: bool, steps: int, score: float, rewards: List[float]) -> None:
-    print(json.dumps({
-        "type":    "END",
-        "success": success,
-        "steps":   steps,
-        "score":   score,
-        "rewards": rewards,
-    }), flush=True)
+    print(f"[END] task={TASK_NAME} score={score:.4f} steps={steps} success={success}", flush=True)
 
 # ── LLM call ─────────────────────────────────────────────────────────────────
 
