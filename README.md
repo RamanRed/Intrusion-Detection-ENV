@@ -1,3 +1,19 @@
+---
+title: NetworkDiagnosticsEnv
+emoji: 🌐
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+license: mit
+short_description: OpenEnv RL environment for autonomous network troubleshooting
+tags:
+  - openenv
+  - reinforcement-learning
+  - network-diagnostics
+  - fastapi
+---
+
 # NetworkDiagnosticsEnv
 
 An **OpenEnv-compliant** reinforcement-learning environment for evaluating AI agents on autonomous network troubleshooting.
